@@ -123,7 +123,7 @@ void ModeZigZag::return_to_manual_control(bool maintain_target)
         stage = MANUAL_REGAIN;
         loiter_nav->clear_pilot_desired_acceleration();
         if (maintain_target) {
-            const Vector3f wp_dest = wp_nav->get_wp_destination();
+            const Vector3f& wp_dest = wp_nav->get_wp_destination();
             loiter_nav->init_target(wp_dest);
             if (wp_nav->origin_and_destination_are_terrain_alt()) {
                 copter.surface_tracking.set_target_alt_cm(wp_dest.z);
@@ -285,7 +285,7 @@ bool ModeZigZag::calculate_next_dest(uint8_t dest_num, bool use_wpnav_alt, Vecto
         next_dest.z = wp_nav->get_wp_destination().z;
     } else {
         // if we have a downward facing range finder then use terrain altitude targets
-        terrain_alt = copter.rangefinder_alt_ok() && wp_nav->rangefinder_used();
+        terrain_alt = copter.rangefinder_alt_ok() && wp_nav->rangefinder_used_and_healthy();
         if (terrain_alt) {
             if (!copter.surface_tracking.get_target_alt_cm(next_dest.z)) {
                 next_dest.z = copter.rangefinder_state.alt_cm_filt.get();

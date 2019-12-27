@@ -84,6 +84,10 @@
  #define MOTOR_CLASS AP_MotorsMulticopter
 #endif
 
+#if MODE_AUTOROTATE_ENABLED == ENABLED
+ #include <AC_Autorotation/AC_Autorotation.h> // Autorotation controllers
+#endif
+
 #include "RC_Channel.h"         // RC Channel Library
 
 #include "GCS_Mavlink.h"
@@ -95,6 +99,7 @@
 #if BEACON_ENABLED == ENABLED
  #include <AP_Beacon/AP_Beacon.h>
 #endif
+
 #if AC_AVOID_ENABLED == ENABLED
  #include <AC_Avoidance/AC_Avoid.h>
 #endif
@@ -230,6 +235,7 @@ public:
     friend class ModeSystemId;
     friend class ModeThrow;
     friend class ModeZigZag;
+    friend class ModeAutorotate;
 
     Copter(void);
 
@@ -286,7 +292,8 @@ private:
         void set_target_alt_cm(float target_alt_cm);
 
         // get target and actual distances (in m) for logging purposes
-        bool get_dist_for_logging(float &target_dist, float &actual_dist) const;
+        bool get_target_dist_for_logging(float &target_dist) const;
+        float get_dist_for_logging() const;
         void invalidate_for_logging() { valid_for_logging = false; }
 
         // surface tracking surface
@@ -311,10 +318,7 @@ private:
     AP_RPM rpm_sensor;
 #endif
 
-    // Inertial Navigation EKF
-    NavEKF2 EKF2{&ahrs, rangefinder};
-    NavEKF3 EKF3{&ahrs, rangefinder};
-    AP_AHRS_NavEKF ahrs{EKF2, EKF3, AP_AHRS_NavEKF::FLAG_ALWAYS_USE_EKF};
+    // Inertial Navigation EKF - different viewpoint
     AP_AHRS_View *ahrs_view;
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
@@ -389,9 +393,7 @@ private:
     // There are multiple states defined such as STABILIZE, ACRO,
     Mode::Number control_mode;
     ModeReason control_mode_reason = ModeReason::UNKNOWN;
-
     Mode::Number prev_control_mode;
-    ModeReason prev_control_mode_reason = ModeReason::UNKNOWN;
 
     RCMapper rcmap;
 
@@ -477,6 +479,7 @@ private:
     AC_PosControl *pos_control;
     AC_WPNav *wp_nav;
     AC_Loiter *loiter_nav;
+
 #if MODE_CIRCLE_ENABLED == ENABLED
     AC_Circle *circle_nav;
 #endif
@@ -521,11 +524,6 @@ private:
     // Parachute release
 #if PARACHUTE == ENABLED
     AP_Parachute parachute{relay};
-#endif
-
-    // Button 
-#if BUTTON_ENABLED == ENABLED
-    AP_Button button;
 #endif
 
     // Landing Gear Controller
@@ -574,6 +572,7 @@ private:
     typedef struct {
         uint8_t dynamic_flight          : 1;    // 0   // true if we are moving at a significant speed (used to turn on/off leaky I terms)
         uint8_t inverted_flight         : 1;    // 1   // true for inverted flight mode
+        uint8_t in_autorotation         : 1;    // 2   // true when heli is in autorotation
     } heli_flags_t;
     heli_flags_t heli_flags;
 
@@ -751,7 +750,10 @@ private:
     void update_heli_control_dynamics(void);
     void heli_update_landing_swash();
     void heli_update_rotor_speed_targets();
-
+    void heli_update_autorotation();
+#if MODE_AUTOROTATE_ENABLED == ENABLED
+    void heli_set_autorotation(bool autotrotation);
+#endif
     // inertia.cpp
     void read_inertia();
 
@@ -886,7 +888,6 @@ private:
     // terrain.cpp
     void terrain_update();
     void terrain_logging();
-    bool terrain_use();
 
     // tuning.cpp
     void tuning();
@@ -978,6 +979,9 @@ private:
 #endif
 #if MODE_ZIGZAG_ENABLED == ENABLED
     ModeZigZag mode_zigzag;
+#endif
+#if MODE_AUTOROTATE_ENABLED == ENABLED
+    ModeAutorotate mode_autorotate;
 #endif
 
     // mode.cpp

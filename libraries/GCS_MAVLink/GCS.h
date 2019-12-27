@@ -13,9 +13,11 @@
 #include <AP_AdvancedFailsafe/AP_AdvancedFailsafe.h>
 #include <AP_RTC/JitterCorrection.h>
 #include <AP_Common/Bitmask.h>
+#include <AP_LTM_Telem/AP_LTM_Telem.h>
 #include <AP_Devo_Telem/AP_Devo_Telem.h>
 #include <RC_Channel/RC_Channel.h>
 #include <AP_Filesystem/AP_Filesystem_Available.h>
+#include <AP_GPS/AP_GPS.h>
 
 #include "MissionItemProtocol_Waypoints.h"
 #include "MissionItemProtocol_Rally.h"
@@ -25,9 +27,9 @@
 #define GCS_DEBUG_SEND_MESSAGE_TIMINGS 0
 
 // check if a message will fit in the payload space available
-#define PAYLOAD_SIZE(chan, id) (GCS_MAVLINK::packet_overhead_chan(chan)+MAVLINK_MSG_ID_ ## id ## _LEN)
+#define PAYLOAD_SIZE(chan, id) (unsigned(GCS_MAVLINK::packet_overhead_chan(chan)+MAVLINK_MSG_ID_ ## id ## _LEN))
 #define HAVE_PAYLOAD_SPACE(chan, id) (comm_get_txspace(chan) >= PAYLOAD_SIZE(chan, id))
-#define CHECK_PAYLOAD_SIZE(id) if (comm_get_txspace(chan) < packet_overhead()+MAVLINK_MSG_ID_ ## id ## _LEN) return false
+#define CHECK_PAYLOAD_SIZE(id) if (txspace() < unsigned(packet_overhead()+MAVLINK_MSG_ID_ ## id ## _LEN)) return false
 #define CHECK_PAYLOAD_SIZE2(id) if (!HAVE_PAYLOAD_SPACE(chan, id)) return false
 
 // convenience macros for defining which ap_message ids are in which streams:
@@ -76,6 +78,17 @@ public:
 
     // returns true if we are requesting any items from the GCS:
     bool requesting_mission_items() const;
+
+    /// Check for available transmit space
+    uint16_t txspace() const {
+        if (_locked) {
+            return 0;
+        }
+        // there were concerns over return a too-large value for
+        // txspace (in case we tried to do too much with the space in
+        // a single loop):
+        return MIN(_port->txspace(), 8192U);
+    }
 
     void send_mission_ack(const mavlink_message_t &msg,
                           MAV_MISSION_TYPE mission_type,
@@ -216,7 +229,14 @@ public:
     void send_set_position_target_global_int(uint8_t target_system, uint8_t target_component, const Location& loc);
     void send_rpm() const;
 
-    bool locked() const;
+    // lock a channel, preventing use by MAVLink
+    void lock(bool _lock) {
+        _locked = _lock;
+    }
+    // returns true if this channel isn't available for MAVLink
+    bool locked() const {
+        return _locked;
+    }
 
     // return a bitmap of active channels. Used by libraries to loop
     // over active channels to send to all active channels    
@@ -241,8 +261,8 @@ public:
       send a MAVLink message to all components with this vehicle's system id
       This is a no-op if no routes to components have been learned
     */
-    static void send_to_components(const mavlink_message_t &msg) { routing.send_to_components(msg); }
-    
+    static void send_to_components(uint32_t msgid, const char *pkt, uint8_t pkt_len) { routing.send_to_components(msgid, pkt, pkt_len); }
+
     /*
       allow forwarding of packets / heartbeats to be blocked as required by some components to reduce traffic
     */
@@ -289,7 +309,8 @@ protected:
     void set_ekf_origin(const Location& loc);
 
     virtual MAV_MODE base_mode() const = 0;
-    virtual MAV_STATE system_status() const = 0;
+    MAV_STATE system_status() const;
+    virtual MAV_STATE vehicle_system_status() const = 0;
 
     virtual MAV_VTOL_STATE vtol_state() const { return MAV_VTOL_STATE_UNDEFINED; }
     virtual MAV_LANDED_STATE landed_state() const { return MAV_LANDED_STATE_UNDEFINED; }
@@ -328,6 +349,9 @@ protected:
     void handle_mission_count(const mavlink_message_t &msg);
     void handle_mission_write_partial_list(const mavlink_message_t &msg);
     void handle_mission_item(const mavlink_message_t &msg);
+
+    void handle_distance_sensor(const mavlink_message_t &msg);
+    void handle_obstacle_distance(const mavlink_message_t &msg);
 
     void handle_common_param_message(const mavlink_message_t &msg);
     void handle_param_set(const mavlink_message_t &msg);
@@ -401,6 +425,9 @@ protected:
     MAV_RESULT handle_command_battery_reset(const mavlink_command_long_t &packet);
     void handle_command_long(const mavlink_message_t &msg);
     MAV_RESULT handle_command_accelcal_vehicle_pos(const mavlink_command_long_t &packet);
+    MAV_RESULT handle_command_do_set_roi_sysid(const uint8_t sysid);
+    MAV_RESULT handle_command_do_set_roi_sysid(const mavlink_command_int_t &packet);
+    MAV_RESULT handle_command_do_set_roi_sysid(const mavlink_command_long_t &packet);
     virtual MAV_RESULT handle_command_mount(const mavlink_command_long_t &packet);
     MAV_RESULT handle_command_mag_cal(const mavlink_command_long_t &packet);
     virtual MAV_RESULT handle_command_long_packet(const mavlink_command_long_t &packet);
@@ -415,6 +442,8 @@ protected:
     MAV_RESULT handle_command_do_fence_enable(const mavlink_command_long_t &packet);
 
     void handle_optical_flow(const mavlink_message_t &msg);
+
+    MAV_RESULT handle_fixed_mag_cal_yaw(const mavlink_command_long_t &packet);
 
     // vehicle-overridable message send function
     virtual bool try_send_message(enum ap_message id);
@@ -772,6 +801,10 @@ private:
 #endif
 
     uint32_t last_mavlink_stats_logged;
+
+    // true if we should NOT do MAVLink on this port (usually because
+    // someone's doing SERIAL_CONTROL over mavlink)
+    bool _locked;
 };
 
 /// @class GCS
@@ -845,6 +878,8 @@ public:
     AP_Frsky_Telem *frsky;
 
 #if !HAL_MINIMIZE_FEATURES
+    // LTM backend
+    AP_LTM_Telem ltm_telemetry;
     // Devo backend
     AP_DEVO_Telem devo_telemetry;
 #endif
@@ -896,6 +931,11 @@ private:
         mavlink_statustext_t    msg;
     };
 
+    virtual AP_GPS::GPS_Status min_status_for_gps_healthy() const {
+        // NO_FIX simply excludes NO_GPS
+        return AP_GPS::GPS_Status::NO_FIX;
+    }
+
     void update_sensor_status_flags();
 
 #if HAL_MEM_CLASS <= HAL_MEM_CLASS_192 || CONFIG_HAL_BOARD == HAL_BOARD_SITL
@@ -913,6 +953,9 @@ private:
 
     // true if we have already allocated protocol objects:
     bool initialised_missionitemprotocol_objects;
+
+    // true if update_send has ever been called:
+    bool update_send_has_been_called;
 
     // handle passthru between two UARTs
     struct {

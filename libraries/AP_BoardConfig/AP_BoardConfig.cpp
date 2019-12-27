@@ -141,10 +141,10 @@ const AP_Param::GroupInfo AP_BoardConfig::var_info[] = {
 
 #if HAL_HAVE_SAFETY_SWITCH
     // @Param: SAFETY_MASK
-    // @DisplayName: Channels which ignore the safety switch state
-    // @Description: A bitmask which controls what channels can move while the safety switch has not been pressed
+    // @DisplayName: Outputs which ignore the safety switch state
+    // @Description: A bitmask which controls what outputs can move while the safety switch has not been pressed
     // @Values: 0:Disabled,1:Enabled
-    // @Bitmask: 0:Ch1,1:Ch2,2:Ch3,3:Ch4,4:Ch5,5:Ch6,6:Ch7,7:Ch8,8:Ch9,9:Ch10,10:Ch11,11:Ch12,12:Ch13,13:Ch14
+    // @Bitmask: 0:Output1,1:Output2,2:Output3,3:Output4,4:Output5,5:Output6,6:Output7,7:Output8,8:Output9,9:Output10,10:Output11,11:Output12,12:Output13,13:Output14
     // @RebootRequired: True
     // @User: Advanced
     AP_GROUPINFO("SAFETY_MASK", 7, AP_BoardConfig, state.ignore_safety_channels, 0),
@@ -335,7 +335,7 @@ void AP_BoardConfig::init_safety()
 */
 bool AP_BoardConfig::_in_sensor_config_error;
 
-void AP_BoardConfig::sensor_config_error(const char *reason)
+void AP_BoardConfig::config_error(const char *fmt, ...)
 {
     _in_sensor_config_error = true;
     /*
@@ -349,9 +349,18 @@ void AP_BoardConfig::sensor_config_error(const char *reason)
         uint32_t now = AP_HAL::millis();
         if (now - last_print_ms >= 3000) {
             last_print_ms = now;
-            printf("Sensor failure: %s\n", reason);
+            va_list arg_list;
+            char printfmt[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+2];
+            hal.util->snprintf(printfmt, sizeof(printfmt), "Config error: %s\n", fmt);
+            va_start(arg_list, fmt);
+            vprintf(printfmt, arg_list);
+            va_end(arg_list);
 #if !APM_BUILD_TYPE(APM_BUILD_UNKNOWN) && !defined(HAL_BUILD_AP_PERIPH)
-            gcs().send_text(MAV_SEVERITY_ERROR, "Check BRD_TYPE: %s", reason);
+            char taggedfmt[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
+            hal.util->snprintf(taggedfmt, sizeof(taggedfmt), "Config error: %s", fmt);
+            va_start(arg_list, fmt);
+            gcs().send_textv(MAV_SEVERITY_CRITICAL, taggedfmt, arg_list);
+            va_end(arg_list);
 #endif
         }
 #if !APM_BUILD_TYPE(APM_BUILD_UNKNOWN) && !defined(HAL_BUILD_AP_PERIPH)
