@@ -15,6 +15,7 @@
 */
 /*
   this header is modelled on the one for the Nucleo-144 H743 board from ChibiOS
+  EDITED By RobotMad for SkyBot - HSI instead of HSE 
  */
 #pragma once
 
@@ -54,35 +55,35 @@
  * Clock tree static settings.
  * Reading STM32 Reference Manual is required.
  */
-#define STM32_HSI_ENABLED                   FALSE
-#define STM32_LSI_ENABLED                   FALSE
+#define STM32_HSI_ENABLED                   TRUE
+#define STM32_LSI_ENABLED                   TRUE
 #define STM32_CSI_ENABLED                   TRUE
 #define STM32_HSI48_ENABLED                 TRUE
-#define STM32_HSE_ENABLED                   TRUE
+#define STM32_HSE_ENABLED                   FALSE
 #define STM32_LSE_ENABLED                   FALSE
-#define STM32_HSIDIV                        STM32_HSIDIV_DIV1
-
+#define STM32_HSIDIV                        STM32_HSIDIV_DIV4
+#define STM32_HSICLK                        16000000U
 /*
  * PLLs static settings.
  * Reading STM32 Reference Manual is required.
  */
-#define STM32_PLLSRC                        STM32_PLLSRC_HSE_CK
+#define STM32_PLLSRC                        STM32_PLLSRC_HSI_CK
 #define STM32_PLLCFGR_MASK                  ~0
 
 /*
-  setup PLLs based on HSE clock
+  setup PLLs based on HSI clock
  */
-#if STM32_HSECLK == 8000000U
+#if STM32_HSICLK == 8000000U
 // this gives 400MHz system clock
 #define STM32_PLL1_DIVM_VALUE               1
 #define STM32_PLL2_DIVM_VALUE               1
 #define STM32_PLL3_DIVM_VALUE               2
-#elif STM32_HSECLK == 16000000U
+#elif STM32_HSICLK == 16000000U
 // this gives 400MHz system clock
 #define STM32_PLL1_DIVM_VALUE               2
 #define STM32_PLL2_DIVM_VALUE               2
 #define STM32_PLL3_DIVM_VALUE               4
-#elif STM32_HSECLK == 24000000U
+#elif STM32_HSICLK == 24000000U
 // this gives 400MHz system clock
 #define STM32_PLL1_DIVM_VALUE               3
 #define STM32_PLL2_DIVM_VALUE               3
@@ -91,7 +92,7 @@
 #error "Unsupported HSE clock"
 #endif
 
-#if (STM32_HSECLK == 8000000U) || (STM32_HSECLK == 16000000U) || (STM32_HSECLK == 24000000U)
+#if (STM32_HSICLK == 8000000U) || (STM32_HSICLK == 16000000U) || (STM32_HSICLK == 24000000U)
 // common clock tree for multiples of 8MHz crystals
 #define STM32_PLL1_DIVN_VALUE               100
 #define STM32_PLL1_DIVP_VALUE               2
@@ -144,7 +145,7 @@
  * Peripherals clocks static settings.
  * Reading STM32 Reference Manual is required.
  */
-#define STM32_MCO1SEL                       STM32_MCO1SEL_HSE_CK
+#define STM32_MCO1SEL                       STM32_MCO1SEL_HSI_CK
 #define STM32_MCO1PRE_VALUE                 4
 #define STM32_MCO2SEL                       STM32_MCO2SEL_SYS_CK
 #define STM32_MCO2PRE_VALUE                 4
@@ -153,7 +154,7 @@
 #define STM32_STOPKERWUCK                   0
 #define STM32_STOPWUCK                      0
 #define STM32_RTCPRE_VALUE                  8
-#define STM32_CKPERSEL                      STM32_CKPERSEL_HSE_CK
+#define STM32_CKPERSEL                      STM32_CKPERSEL_HSI_CK
 #define STM32_SDMMCSEL                      STM32_SDMMCSEL_PLL1_Q_CK
 #define STM32_QSPISEL                       STM32_QSPISEL_HCLK
 #define STM32_FMCSEL                        STM32_QSPISEL_HCLK
