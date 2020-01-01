@@ -205,7 +205,7 @@ PF9 UART7_CTS UART7
 PF8 UART7_RTS UART7
 
 # Define a LED, mapping it to GPIO(0). LOW will illuminate the LED
-PB1 FMU_LED_AMBER OUTPUT LOW GPIO(0)
+PB1 FMU_LED_AMBER OUTPUT HIGH GPIO(0)
 
 # Power flag pins: these tell the MCU the status of the various power
 # supplies that are available. The pin names need to exactly match the
