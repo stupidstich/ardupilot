@@ -62,14 +62,15 @@
 #define STM32_HSE_ENABLED                   FALSE
 #define STM32_LSE_ENABLED                   FALSE
 #define STM32_HSIDIV                        STM32_HSIDIV_DIV4
-#define STM32_HSICLK                        16000000U
+/*define STM32_HSICLK                        16000000U
+*/
+
 /*
  * PLLs static settings.
  * Reading STM32 Reference Manual is required.
  */
 #define STM32_PLLSRC                        STM32_PLLSRC_HSI_CK
-#define STM32_PLLCFGR_MASK                  ~0
-
+#define STM32_PLLCFGR_MASK                  ~0*
 /*
   setup PLLs based on HSI clock
  */
