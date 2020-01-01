@@ -112,7 +112,7 @@ PE6 SPI4_MOSI SPI4
 # that CS pins are software controlled, and are not tied to a particular
 # SPI bus.
 #PC1 MAG_CS CS
-PE4 MPU_CS CS
+#PE4 MPU_CS CS
 
 # This defines more ADC inputs.
 #PC3 AUX_POWER ADC1 SCALE(1)
