@@ -69,7 +69,7 @@
  * Reading STM32 Reference Manual is required.
  */
 #define STM32_PLLSRC                        STM32_PLLSRC_HSI_CK
-#define STM32_PLLCFGR_MASK                  ~0*
+#define STM32_PLLCFGR_MASK                  ~0
 /*
   setup PLLs based on HSI clock
  */
