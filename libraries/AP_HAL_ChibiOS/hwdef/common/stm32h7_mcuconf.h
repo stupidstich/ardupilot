@@ -62,8 +62,7 @@
 #define STM32_HSE_ENABLED                   FALSE
 #define STM32_LSE_ENABLED                   FALSE
 #define STM32_HSIDIV                        STM32_HSIDIV_DIV4
-/*define STM32_HSICLK                        16000000U
-*/
+#define STM32_HSICLK_DIVIDED                16000000U
 
 /*
  * PLLs static settings.
@@ -74,17 +73,17 @@
 /*
   setup PLLs based on HSI clock
  */
-#if STM32_HSICLK == 8000000U
+#if STM32_HSICLK_DIVIDED == 8000000U
 // this gives 400MHz system clock
 #define STM32_PLL1_DIVM_VALUE               1
 #define STM32_PLL2_DIVM_VALUE               1
 #define STM32_PLL3_DIVM_VALUE               2
-#elif STM32_HSICLK == 16000000U
+#elif STM32_HSICLK_DIVIDED == 16000000U
 // this gives 400MHz system clock
 #define STM32_PLL1_DIVM_VALUE               2
 #define STM32_PLL2_DIVM_VALUE               2
 #define STM32_PLL3_DIVM_VALUE               4
-#elif STM32_HSICLK == 24000000U
+#elif STM32_HSICLK_DIVIDED == 24000000U
 // this gives 400MHz system clock
 #define STM32_PLL1_DIVM_VALUE               3
 #define STM32_PLL2_DIVM_VALUE               3
@@ -93,7 +92,7 @@
 #error "Unsupported HSE clock"
 #endif
 
-#if (STM32_HSICLK == 8000000U) || (STM32_HSICLK == 16000000U) || (STM32_HSICLK == 24000000U)
+#if (STM32_HSICLK_DIVIDED == 8000000U) || (STM32_HSICLK_DIVIDED == 16000000U) || (STM32_HSICLK_DIVIDED == 24000000U)
 // common clock tree for multiples of 8MHz crystals
 #define STM32_PLL1_DIVN_VALUE               100
 #define STM32_PLL1_DIVP_VALUE               2
