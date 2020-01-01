@@ -217,7 +217,7 @@
 
 // we call it ADC1 in hwdef.dat, but driver uses ADC12 for DMA stream
 //#ifdef STM32_ADC_ADC1_DMA_STREAM
-#define STM32_ADC_ADC12_DMA_STREAM STM32_ADC_ADC1_DMA_STREAM
+#define STM32_ADC_ADC12_DMA_STREAM STM32_DMA_STREAM_ID(2, 4)
 //#endif
 
 /*
