@@ -1,12 +1,9 @@
 /*
     ChibiOS - Copyright (C) 2006..2018 Giovanni Di Sirio
-
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
     You may obtain a copy of the License at
-
         http://www.apache.org/licenses/LICENSE-2.0
-
     Unless required by applicable law or agreed to in writing, software
     distributed under the License is distributed on an "AS IS" BASIS,
     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,7 +12,6 @@
 */
 /*
   this header is modelled on the one for the Nucleo-144 H743 board from ChibiOS
-  EDITED By RobotMad for SkyBot - HSI instead of HSE 
  */
 #pragma once
 
@@ -55,35 +51,35 @@
  * Clock tree static settings.
  * Reading STM32 Reference Manual is required.
  */
-#define STM32_HSI_ENABLED                   TRUE
-#define STM32_LSI_ENABLED                   TRUE
+#define STM32_HSI_ENABLED                   FALSE
+#define STM32_LSI_ENABLED                   FALSE
 #define STM32_CSI_ENABLED                   TRUE
 #define STM32_HSI48_ENABLED                 TRUE
-#define STM32_HSE_ENABLED                   FALSE
+#define STM32_HSE_ENABLED                   TRUE
 #define STM32_LSE_ENABLED                   FALSE
-#define STM32_HSIDIV                        STM32_HSIDIV_DIV4
-#define STM32_HSICLK_DIVIDED                16000000U
+#define STM32_HSIDIV                        STM32_HSIDIV_DIV1
 
 /*
  * PLLs static settings.
  * Reading STM32 Reference Manual is required.
  */
-#define STM32_PLLSRC                        STM32_PLLSRC_HSI_CK
+#define STM32_PLLSRC                        STM32_PLLSRC_HSE_CK
 #define STM32_PLLCFGR_MASK                  ~0
+
 /*
-  setup PLLs based on HSI clock
+  setup PLLs based on HSE clock
  */
-#if STM32_HSICLK_DIVIDED == 8000000U
+#if STM32_HSECLK == 8000000U
 // this gives 400MHz system clock
 #define STM32_PLL1_DIVM_VALUE               1
 #define STM32_PLL2_DIVM_VALUE               1
 #define STM32_PLL3_DIVM_VALUE               2
-#elif STM32_HSICLK_DIVIDED == 16000000U
+#elif STM32_HSECLK == 16000000U
 // this gives 400MHz system clock
 #define STM32_PLL1_DIVM_VALUE               2
 #define STM32_PLL2_DIVM_VALUE               2
 #define STM32_PLL3_DIVM_VALUE               4
-#elif STM32_HSICLK_DIVIDED == 24000000U
+#elif STM32_HSECLK == 24000000U
 // this gives 400MHz system clock
 #define STM32_PLL1_DIVM_VALUE               3
 #define STM32_PLL2_DIVM_VALUE               3
@@ -92,7 +88,7 @@
 #error "Unsupported HSE clock"
 #endif
 
-#if (STM32_HSICLK_DIVIDED == 8000000U) || (STM32_HSICLK_DIVIDED == 16000000U) || (STM32_HSICLK_DIVIDED == 24000000U)
+#if (STM32_HSECLK == 8000000U) || (STM32_HSECLK == 16000000U) || (STM32_HSECLK == 24000000U)
 // common clock tree for multiples of 8MHz crystals
 #define STM32_PLL1_DIVN_VALUE               100
 #define STM32_PLL1_DIVP_VALUE               2
@@ -145,7 +141,7 @@
  * Peripherals clocks static settings.
  * Reading STM32 Reference Manual is required.
  */
-#define STM32_MCO1SEL                       STM32_MCO1SEL_HSI_CK
+#define STM32_MCO1SEL                       STM32_MCO1SEL_HSE_CK
 #define STM32_MCO1PRE_VALUE                 4
 #define STM32_MCO2SEL                       STM32_MCO2SEL_SYS_CK
 #define STM32_MCO2PRE_VALUE                 4
@@ -154,7 +150,7 @@
 #define STM32_STOPKERWUCK                   0
 #define STM32_STOPWUCK                      0
 #define STM32_RTCPRE_VALUE                  8
-#define STM32_CKPERSEL                      STM32_CKPERSEL_HSI_CK
+#define STM32_CKPERSEL                      STM32_CKPERSEL_HSE_CK
 #define STM32_SDMMCSEL                      STM32_SDMMCSEL_PLL1_Q_CK
 #define STM32_QSPISEL                       STM32_QSPISEL_HCLK
 #define STM32_FMCSEL                        STM32_QSPISEL_HCLK
@@ -216,9 +212,8 @@
 #define STM32_ADC_ADC3_CLOCK_MODE           ADC_CCR_CKMODE_ADCCK
 
 // we call it ADC1 in hwdef.dat, but driver uses ADC12 for DMA stream
-//#ifdef STM32_ADC_ADC1_DMA_STREAM
-#define STM32_ADC_ADC12_DMA_STREAM STM32_DMA_STREAM_ID(2, 4)
-//#endif
+#define STM32_ADC_ADC12_DMA_STREAM STM32_ADC_ADC1_DMA_STREAM
+
 
 /*
  * CAN driver system settings.
