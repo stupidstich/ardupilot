@@ -29,32 +29,30 @@ STM32_VDD 330U
 define HAL_STORAGE_SIZE 16384
 
 # order of I2C buses
-I2C_ORDER I2C1 I2C2 I2C4
+I2C_ORDER I2C1 I2C2 I2C3 I2C4
 
 # order of UARTs (and USB)
-UART_ORDER OTG1 UART4 USART2 USART3 UART8 UART7 
+UART_ORDER OTG1 UART4 USART1 USART2 USART3 UART7 UART8 
 
 # UART4 serial GPS
 PD1 UART4_TX UART4
 PD0 UART4_RX UART4 NODMA
 
+#  USART6 to IO
+PC6 USART6_TX USART6
+PC7 USART6_RX USART6
+
 #PB5 BATT_VOLTAGE_SENS ADC1 SCALE(1)
 #PA3 BATT_CURRENT_SENS ADC1 SCALE(1)
 
-# Now the VDD sense pin. This is used to sense primary board voltage.
-#PA4 VDD_5V_SENS ADC1 SCALE(2)
 
-#PE3 VDD_5V_PERIPH_EN OUTPUT LOW
-
-# This is the pin that senses USB being connected. It is an input pin
-# setup as OPENDRAIN.
-#PA9 VBUS INPUT OPENDRAIN
 
 # Now we define the pins that USB is connected on.
-PA11 OTG_FS_DM OTG1
-PA12 OTG_FS_DP OTG1
+PB14 OTG_HS_DM OTG1
+PB15 OTG_HS_DP OTG1
 
 # These are the pins for SWD debugging with a STlinkv2 or black-magic probe.
+PB13 VBUS INPUT OPENDRAIN
 PA13 JTMS-SWDIO SWD
 PA14 JTCK-SWCLK SWD
 
@@ -68,14 +66,6 @@ PB8 EXTERN_GPIO2 OUTPUT GPIO(2)
 PB9 EXTERN_GPIO3 OUTPUT GPIO(3)
 PB0 EXTERN_GPIO4 OUTPUT GPIO(4)
 
-# This defines some input pins, currently unused.
-#PB2 BOOT1 INPUT
-#PB3 FMU_SW0 INPUT
-
-# This defines the pins for the 2nd CAN interface, if available.
-#PB6 CAN2_TX CAN2
-#PB12 CAN2_RX CAN2
-
 # Now the first I2C bus. The pin speeds are automatically setup
 # correctly, but can be overridden here if needed.
 PB6 I2C1_SCL I2C1
@@ -86,60 +76,36 @@ PF1 I2C2_SCL I2C2
 PF0 I2C2_SDA I2C2
 
 # the 3rd I2C bus
-#PA8 I2C3_SCL I2C3
-#PC9 I2C3_SDA I2C3
+PA8 I2C3_SCL I2C3
+PC9 I2C3_SDA I2C3
 
 # the 4th I2C bus
 PF14 I2C4_SCL I2C4
 PF15 I2C4_SDA I2C4
 
+
+
+
 PA5 SPI1_SCK SPI1
 PA6 SPI1_MISO SPI1
 PA7 SPI1_MOSI SPI1
 
-#PC10 SPI3_SCK SPI3
-#PC11 SPI3_MISO SPI3
-#PC12 SPI3_MOSI SPI3
+PC10 SPI3_SCK SPI3
+PC11 SPI3_MISO SPI3
+PC12 SPI3_MOSI SPI3
 
 PE2 SPI4_SCK SPI4
 PE5 SPI4_MISO SPI4
 PE6 SPI4_MOSI SPI4
+PE4 MPU_CS CS
 
-# This input pin is used to detect that power is valid on USB.
-#PC0 VBUS_VALID INPUT
-
-# This defines the CS pin for the magnetometer and first IMU. Note
-# that CS pins are software controlled, and are not tied to a particular
-# SPI bus.
-#PC1 MAG_CS CS
-#PE4 MPU_CS CS
-
-# This defines more ADC inputs.
-#PC3 AUX_POWER ADC1 SCALE(1)
-#PC4 AUX_ADC2 ADC1 SCALE(1)
-
-# And the analog input for airspeed (rarely used these days).
-#PC5 PRESSURE_SENS ADC1 SCALE(2)
 
 #  USART6 to IO
 PC6 USART6_TX USART6
 PC7 USART6_RX USART6
 
-# Now setup the pins for the microSD card, if available.
-#PG9 SDMMC1_D0 SDMMC1
-#PG10 SDMMC1_D1 SDMMC1
-#PG11 SDMMC1_D2 SDMMC1
-#PG12 SDMMC1_D3 SDMMC1
-#PD6 SDMMC1_CK SDMMC1
-#PD7 SDMMC1_CMD SDMMC1
-
-# More CS pins for more sensors. The labels for all CS pins need to
-# match the SPI device table later in this file.
-#PC13 GYRO_EXT_CS CS
-#PC14 BARO_EXT_CS CS
-#PC15 ACCEL_EXT_CS CS
 #PD7 BARO_CS CS
-PE4 MPU_CS CS
+
 
 # the first CAN bus
 #PD0 CAN1_RX CAN1
@@ -159,9 +125,6 @@ PD9 USART3_RX USART3
 PD11 USART3_CTS USART3
 PD12 USART3_RTS USART3
 
-# The CS pin for FRAM (ramtron). This one is marked as using
-# SPEED_VERYLOW, which matches the HAL_PX4 setup.
-#PD10 FRAM_CS CS SPEED_VERYLOW
 
 # Now we start defining some PWM pins. We also map these pins to GPIO
 # values, so users can set BRD_PWM_COUNT to choose how many of the PWM
@@ -180,9 +143,6 @@ define BOARD_PWM_COUNT_DEFAULT 4
 # Pin for PWM Voltage Selection
 #PB4 PWM_VOLT_SEL OUTPUT HIGH GPIO(3)
 
-# Relays default to use GPIO pins 54 and 55.
-#define RELAY1_PIN_DEFAULT 54
-#define RELAY2_PIN_DEFAULT 55
 
 # This is the invensense data-ready pin. We don't use it in the
 # default driver.
