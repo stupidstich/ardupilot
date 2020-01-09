@@ -171,6 +171,8 @@ define HAL_DEFAULT_INS_FAST_SAMPLE 5
 
 BARO BMP280 SPI:bmp280
 
+define HAL_PROBE_EXTERNAL_I2C_BAROS
+
 # also probe for external compasses
 define HAL_PROBE_EXTERNAL_I2C_COMPASSES
 
