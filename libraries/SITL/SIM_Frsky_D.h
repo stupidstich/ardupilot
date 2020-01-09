@@ -12,38 +12,57 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+/*
+  Simulated Frsky D device
+
+./Tools/autotest/sim_vehicle.py --gdb --debug -v ArduCopter -A --uartF=sim:frsky-d --speedup=1
+
+param set SERIAL5_PROTOCOL 3
+reboot
+
+arm throttle
+rc 3 1600
+
+*/
 
 #pragma once
 
-#include "AP_Proximity.h"
-#include "AP_Proximity_Backend.h"
+#include "SIM_Aircraft.h"
 
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
 #include <SITL/SITL.h>
 
-class AP_Proximity_AirSimSITL : public AP_Proximity_Backend
-{
+#include "SIM_Frsky.h"
 
+namespace SITL {
+
+class Frsky_D : public Frsky {
 public:
-    // constructor
-    using AP_Proximity_Backend::AP_Proximity_Backend;
+
+    using Frsky::Frsky;
 
     // update state
-    void update(void) override;
-
-    // get maximum and minimum distances (in meters) of sensor
-    float distance_max() const override;
-    float distance_min() const override;
-
-    // get distance upwards in meters. returns true on success
-    bool get_upward_distance(float &distance) const override;
+    virtual void update() override;
 
 private:
-    SITL::SITL *sitl = AP::sitl();
 
-    // sector related variables
-    float _angle_deg_last;
-    float _distance_m_last;
-    uint8_t _last_sector;
+    enum class State {
+        WANT_START_STOP_D = 16,
+        WANT_ID = 17,
+        WANT_BYTE1 = 18,
+        WANT_BYTE2 = 19,
+    };
+    State _state = State::WANT_START_STOP_D;
+
+    char _buffer[32];
+    uint16_t _buflen = 0;
+
+    uint8_t _id;
+    uint16_t _data;
+
+
+    void handle_data(uint8_t id, uint16_t data);
+
+    void shift_start_stop_d();
 };
-#endif // CONFIG_HAL_BOARD
+
+}
