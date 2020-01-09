@@ -173,6 +173,8 @@ BARO BMP280 SPI:bmp280
 
 define HAL_PROBE_EXTERNAL_I2C_BAROS
 
+define HAL_BARO_ALLOW_INIT_NO_BARO
+
 # also probe for external compasses
 define HAL_PROBE_EXTERNAL_I2C_COMPASSES
 
