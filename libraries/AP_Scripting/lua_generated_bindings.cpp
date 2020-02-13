@@ -1,6 +1,9 @@
-// auto generated bindings, don't manually edit
+// auto generated bindings, don't manually edit.  See README.md for details.
 #include "lua_generated_bindings.h"
 #include "lua_boxed_numerics.h"
+#include <AP_ESC_Telem/AP_ESC_Telem.h>
+#include <AP_Baro/AP_Baro.h>
+#include <AP_SerialManager/AP_SerialManager.h>
 #include <RC_Channel/RC_Channel.h>
 #include <SRV_Channel/SRV_Channel.h>
 #include <AP_SerialLED/AP_SerialLED.h>
@@ -77,6 +80,20 @@ Vector3f * check_Vector3f(lua_State *L, int arg) {
 Location * check_Location(lua_State *L, int arg) {
     void *data = luaL_checkudata(L, arg, "Location");
     return (Location *)data;
+}
+
+int new_AP_HAL__UARTDriver(lua_State *L) {
+    luaL_checkstack(L, 2, "Out of stack");
+    void *ud = lua_newuserdata(L, sizeof(AP_HAL::UARTDriver *));
+    memset(ud, 0, sizeof(AP_HAL::UARTDriver *));
+    luaL_getmetatable(L, "AP_HAL::UARTDriver");
+    lua_setmetatable(L, -2);
+    return 1;
+}
+
+AP_HAL::UARTDriver ** check_AP_HAL__UARTDriver(lua_State *L, int arg) {
+    void *data = luaL_checkudata(L, arg, "AP_HAL::UARTDriver");
+    return (AP_HAL::UARTDriver **)data;
 }
 
 static int Vector2f_y(lua_State *L) {
@@ -514,6 +531,92 @@ const luaL_Reg Location_meta[] = {
     {NULL, NULL}
 };
 
+static int AP_ESC_Telem_get_usage_seconds(lua_State *L) {
+    AP_ESC_Telem * ud = AP_ESC_Telem::get_singleton();
+    if (ud == nullptr) {
+        return luaL_argerror(L, 1, "esc_telem not supported on this firmware");
+    }
+
+    binding_argcheck(L, 2);
+    const lua_Integer raw_data_2 = luaL_checkinteger(L, 2);
+    luaL_argcheck(L, ((raw_data_2 >= MAX(0, 0)) && (raw_data_2 <= MIN(NUM_SERVO_CHANNELS, UINT8_MAX))), 2, "argument out of range");
+    const uint8_t data_2 = static_cast<uint8_t>(raw_data_2);
+    uint32_t data_5003 = {};
+    const bool data = ud->get_usage_seconds(
+            data_2,
+            data_5003);
+
+    if (data) {
+        new_uint32_t(L);
+        *static_cast<uint32_t *>(luaL_checkudata(L, -1, "uint32_t")) = data_5003;
+    } else {
+        lua_pushnil(L);
+    }
+    return 1;
+}
+
+static int AP_Baro_get_external_temperature(lua_State *L) {
+    AP_Baro * ud = AP_Baro::get_singleton();
+    if (ud == nullptr) {
+        return luaL_argerror(L, 1, "baro not supported on this firmware");
+    }
+
+    binding_argcheck(L, 1);
+    const float data = ud->get_external_temperature();
+
+    lua_pushnumber(L, data);
+    return 1;
+}
+
+static int AP_Baro_get_temperature(lua_State *L) {
+    AP_Baro * ud = AP_Baro::get_singleton();
+    if (ud == nullptr) {
+        return luaL_argerror(L, 1, "baro not supported on this firmware");
+    }
+
+    binding_argcheck(L, 1);
+    const float data = ud->get_temperature();
+
+    lua_pushnumber(L, data);
+    return 1;
+}
+
+static int AP_Baro_get_pressure(lua_State *L) {
+    AP_Baro * ud = AP_Baro::get_singleton();
+    if (ud == nullptr) {
+        return luaL_argerror(L, 1, "baro not supported on this firmware");
+    }
+
+    binding_argcheck(L, 1);
+    const float data = ud->get_pressure();
+
+    lua_pushnumber(L, data);
+    return 1;
+}
+
+static int AP_SerialManager_find_serial(lua_State *L) {
+    AP_SerialManager * ud = AP_SerialManager::get_singleton();
+    if (ud == nullptr) {
+        return luaL_argerror(L, 1, "serial not supported on this firmware");
+    }
+
+    binding_argcheck(L, 2);
+    const lua_Integer raw_data_2 = luaL_checkinteger(L, 2);
+    luaL_argcheck(L, ((raw_data_2 >= MAX(0, 0)) && (raw_data_2 <= MIN(UINT8_MAX, UINT8_MAX))), 2, "argument out of range");
+    const uint8_t data_2 = static_cast<uint8_t>(raw_data_2);
+    AP_HAL::UARTDriver *data = ud->find_serial(
+            AP_SerialManager::SerialProtocol_Scripting,
+            data_2);
+
+    if (data == NULL) {
+        lua_pushnil(L);
+    } else {
+        new_AP_HAL__UARTDriver(L);
+        *check_AP_HAL__UARTDriver(L, -1) = data;
+    }
+    return 1;
+}
+
 static int RC_Channels_get_pwm(lua_State *L) {
     RC_Channels * ud = RC_Channels::get_singleton();
     if (ud == nullptr) {
@@ -582,7 +685,7 @@ static int AP_SerialLED_set_RGB(lua_State *L) {
     const lua_Integer raw_data_2 = luaL_checkinteger(L, 2);
     luaL_argcheck(L, ((raw_data_2 >= MAX(1, 0)) && (raw_data_2 <= MIN(16, UINT8_MAX))), 2, "argument out of range");
     const uint8_t data_2 = static_cast<uint8_t>(raw_data_2);
-    const uint32_t raw_data_3 = *check_uint32_t(L, 3);
+    const uint32_t raw_data_3 = coerce_to_uint32_t(L, 3);
     luaL_argcheck(L, ((raw_data_3 >= MAX(0U, 0U)) && (raw_data_3 <= MIN(UINT32_MAX, UINT32_MAX))), 3, "argument out of range");
     const uint32_t data_3 = static_cast<uint32_t>(raw_data_3);
     const lua_Integer raw_data_4 = luaL_checkinteger(L, 4);
@@ -625,6 +728,46 @@ static int AP_SerialLED_set_num_LEDs(lua_State *L) {
     return 1;
 }
 
+static int AP_Vehicle_get_time_flying_ms(lua_State *L) {
+    AP_Vehicle * ud = AP_Vehicle::get_singleton();
+    if (ud == nullptr) {
+        return luaL_argerror(L, 1, "vehicle not supported on this firmware");
+    }
+
+    binding_argcheck(L, 1);
+    const uint32_t data = ud->get_time_flying_ms();
+
+        new_uint32_t(L);
+        *static_cast<uint32_t *>(luaL_checkudata(L, -1, "uint32_t")) = data;
+    return 1;
+}
+
+static int AP_Vehicle_get_likely_flying(lua_State *L) {
+    AP_Vehicle * ud = AP_Vehicle::get_singleton();
+    if (ud == nullptr) {
+        return luaL_argerror(L, 1, "vehicle not supported on this firmware");
+    }
+
+    binding_argcheck(L, 1);
+    const bool data = ud->get_likely_flying();
+
+    lua_pushboolean(L, data);
+    return 1;
+}
+
+static int AP_Vehicle_get_mode(lua_State *L) {
+    AP_Vehicle * ud = AP_Vehicle::get_singleton();
+    if (ud == nullptr) {
+        return luaL_argerror(L, 1, "vehicle not supported on this firmware");
+    }
+
+    binding_argcheck(L, 1);
+    const uint8_t data = ud->get_mode();
+
+    lua_pushinteger(L, data);
+    return 1;
+}
+
 static int AP_Vehicle_set_mode(lua_State *L) {
     AP_Vehicle * ud = AP_Vehicle::get_singleton();
     if (ud == nullptr) {
@@ -653,7 +796,7 @@ static int GCS_set_message_interval(lua_State *L) {
     const lua_Integer raw_data_2 = luaL_checkinteger(L, 2);
     luaL_argcheck(L, ((raw_data_2 >= MAX(0, 0)) && (raw_data_2 <= MIN(MAVLINK_COMM_NUM_BUFFERS, UINT8_MAX))), 2, "argument out of range");
     const uint8_t data_2 = static_cast<uint8_t>(raw_data_2);
-    const uint32_t raw_data_3 = *check_uint32_t(L, 3);
+    const uint32_t raw_data_3 = coerce_to_uint32_t(L, 3);
     luaL_argcheck(L, ((raw_data_3 >= MAX(0U, 0U)) && (raw_data_3 <= MIN(UINT32_MAX, UINT32_MAX))), 3, "argument out of range");
     const uint32_t data_3 = static_cast<uint32_t>(raw_data_3);
     const lua_Integer raw_data_4 = luaL_checkinteger(L, 4);
@@ -1538,6 +1681,27 @@ static int AP_Arming_disarm(lua_State *L) {
     return 1;
 }
 
+static int AP_AHRS_airspeed_estimate(lua_State *L) {
+    AP_AHRS * ud = AP_AHRS::get_singleton();
+    if (ud == nullptr) {
+        return luaL_argerror(L, 1, "ahrs not supported on this firmware");
+    }
+
+    binding_argcheck(L, 1);
+    float data_5002 = {};
+    ud->get_semaphore().take_blocking();
+    const bool data = ud->airspeed_estimate(
+            data_5002);
+
+    ud->get_semaphore().give();
+    if (data) {
+        lua_pushnumber(L, data_5002);
+    } else {
+        lua_pushnil(L);
+    }
+    return 1;
+}
+
 static int AP_AHRS_prearm_healthy(lua_State *L) {
     AP_AHRS * ud = AP_AHRS::get_singleton();
     if (ud == nullptr) {
@@ -1764,6 +1928,23 @@ static int AP_AHRS_get_roll(lua_State *L) {
     return 1;
 }
 
+const luaL_Reg AP_ESC_Telem_meta[] = {
+    {"get_usage_seconds", AP_ESC_Telem_get_usage_seconds},
+    {NULL, NULL}
+};
+
+const luaL_Reg AP_Baro_meta[] = {
+    {"get_external_temperature", AP_Baro_get_external_temperature},
+    {"get_temperature", AP_Baro_get_temperature},
+    {"get_pressure", AP_Baro_get_pressure},
+    {NULL, NULL}
+};
+
+const luaL_Reg AP_SerialManager_meta[] = {
+    {"find_serial", AP_SerialManager_find_serial},
+    {NULL, NULL}
+};
+
 const luaL_Reg RC_Channels_meta[] = {
     {"get_pwm", RC_Channels_get_pwm},
     {NULL, NULL}
@@ -1782,6 +1963,9 @@ const luaL_Reg AP_SerialLED_meta[] = {
 };
 
 const luaL_Reg AP_Vehicle_meta[] = {
+    {"get_time_flying_ms", AP_Vehicle_get_time_flying_ms},
+    {"get_likely_flying", AP_Vehicle_get_likely_flying},
+    {"get_mode", AP_Vehicle_get_mode},
     {"set_mode", AP_Vehicle_set_mode},
     {NULL, NULL}
 };
@@ -1869,6 +2053,7 @@ const luaL_Reg AP_Arming_meta[] = {
 };
 
 const luaL_Reg AP_AHRS_meta[] = {
+    {"airspeed_estimate", AP_AHRS_airspeed_estimate},
     {"prearm_healthy", AP_AHRS_prearm_healthy},
     {"home_is_set", AP_AHRS_home_is_set},
     {"get_relative_position_NED_home", AP_AHRS_get_relative_position_NED_home},
@@ -1882,6 +2067,87 @@ const luaL_Reg AP_AHRS_meta[] = {
     {"get_yaw", AP_AHRS_get_yaw},
     {"get_pitch", AP_AHRS_get_pitch},
     {"get_roll", AP_AHRS_get_roll},
+    {NULL, NULL}
+};
+
+static int AP_HAL__UARTDriver_set_flow_control(lua_State *L) {
+    binding_argcheck(L, 2);
+    AP_HAL::UARTDriver * ud = *check_AP_HAL__UARTDriver(L, 1);
+    if (ud == NULL) {
+        luaL_error(L, "Internal error, null pointer");
+    }
+    const lua_Integer raw_data_2 = luaL_checkinteger(L, 2);
+    luaL_argcheck(L, ((raw_data_2 >= static_cast<int32_t>(AP_HAL::UARTDriver::FLOW_CONTROL_DISABLE)) && (raw_data_2 <= static_cast<int32_t>(AP_HAL::UARTDriver::FLOW_CONTROL_AUTO))), 2, "argument out of range");
+    const AP_HAL::UARTDriver::flow_control data_2 = static_cast<AP_HAL::UARTDriver::flow_control>(raw_data_2);
+    ud->set_flow_control(
+            data_2);
+
+    return 0;
+}
+
+static int AP_HAL__UARTDriver_available(lua_State *L) {
+    binding_argcheck(L, 1);
+    AP_HAL::UARTDriver * ud = *check_AP_HAL__UARTDriver(L, 1);
+    if (ud == NULL) {
+        luaL_error(L, "Internal error, null pointer");
+    }
+    const uint32_t data = ud->available();
+
+        new_uint32_t(L);
+        *static_cast<uint32_t *>(luaL_checkudata(L, -1, "uint32_t")) = data;
+    return 1;
+}
+
+static int AP_HAL__UARTDriver_write(lua_State *L) {
+    binding_argcheck(L, 2);
+    AP_HAL::UARTDriver * ud = *check_AP_HAL__UARTDriver(L, 1);
+    if (ud == NULL) {
+        luaL_error(L, "Internal error, null pointer");
+    }
+    const lua_Integer raw_data_2 = luaL_checkinteger(L, 2);
+    luaL_argcheck(L, ((raw_data_2 >= MAX(0, 0)) && (raw_data_2 <= MIN(UINT8_MAX, UINT8_MAX))), 2, "argument out of range");
+    const uint8_t data_2 = static_cast<uint8_t>(raw_data_2);
+    const uint32_t data = ud->write(
+            data_2);
+
+        new_uint32_t(L);
+        *static_cast<uint32_t *>(luaL_checkudata(L, -1, "uint32_t")) = data;
+    return 1;
+}
+
+static int AP_HAL__UARTDriver_read(lua_State *L) {
+    binding_argcheck(L, 1);
+    AP_HAL::UARTDriver * ud = *check_AP_HAL__UARTDriver(L, 1);
+    if (ud == NULL) {
+        luaL_error(L, "Internal error, null pointer");
+    }
+    const int16_t data = ud->read();
+
+    lua_pushinteger(L, data);
+    return 1;
+}
+
+static int AP_HAL__UARTDriver_begin(lua_State *L) {
+    binding_argcheck(L, 2);
+    AP_HAL::UARTDriver * ud = *check_AP_HAL__UARTDriver(L, 1);
+    if (ud == NULL) {
+        luaL_error(L, "Internal error, null pointer");
+    }
+    const uint32_t raw_data_2 = coerce_to_uint32_t(L, 2);
+    luaL_argcheck(L, ((raw_data_2 >= MAX(1U, 0U)) && (raw_data_2 <= MIN(UINT32_MAX, UINT32_MAX))), 2, "argument out of range");
+    const uint32_t data_2 = static_cast<uint32_t>(raw_data_2);
+    ud->begin(
+            data_2);
+
+    return 0;
+}
+
+const luaL_Reg AP_HAL__UARTDriver_meta[] = {
+    {"set_flow_control", AP_HAL__UARTDriver_set_flow_control},
+    {"available", AP_HAL__UARTDriver_available},
+    {"write", AP_HAL__UARTDriver_write},
+    {"read", AP_HAL__UARTDriver_read},
+    {"begin", AP_HAL__UARTDriver_begin},
     {NULL, NULL}
 };
 
@@ -1919,6 +2185,9 @@ const struct userdata_meta userdata_fun[] = {
 };
 
 const struct userdata_meta singleton_fun[] = {
+    {"esc_telem", AP_ESC_Telem_meta, NULL},
+    {"baro", AP_Baro_meta, NULL},
+    {"serial", AP_SerialManager_meta, NULL},
     {"rc", RC_Channels_meta, NULL},
     {"SRV_Channels", SRV_Channels_meta, NULL},
     {"serialLED", AP_SerialLED_meta, NULL},
@@ -1934,12 +2203,26 @@ const struct userdata_meta singleton_fun[] = {
     {"ahrs", AP_AHRS_meta, NULL},
 };
 
+const struct userdata_meta ap_object_fun[] = {
+    {"AP_HAL::UARTDriver", AP_HAL__UARTDriver_meta, NULL},
+};
+
 void load_generated_bindings(lua_State *L) {
     luaL_checkstack(L, 5, "Out of stack");
     // userdata metatables
     for (uint32_t i = 0; i < ARRAY_SIZE(userdata_fun); i++) {
         luaL_newmetatable(L, userdata_fun[i].name);
         luaL_setfuncs(L, userdata_fun[i].reg, 0);
+        lua_pushstring(L, "__index");
+        lua_pushvalue(L, -2);
+        lua_settable(L, -3);
+        lua_pop(L, 1);
+    }
+
+    // ap object metatables
+    for (uint32_t i = 0; i < ARRAY_SIZE(ap_object_fun); i++) {
+        luaL_newmetatable(L, ap_object_fun[i].name);
+        luaL_setfuncs(L, ap_object_fun[i].reg, 0);
         lua_pushstring(L, "__index");
         lua_pushvalue(L, -2);
         lua_settable(L, -3);
@@ -1973,6 +2256,9 @@ void load_generated_bindings(lua_State *L) {
 }
 
 const char *singletons[] = {
+    "esc_telem",
+    "baro",
+    "serial",
     "rc",
     "SRV_Channels",
     "serialLED",
@@ -1995,6 +2281,7 @@ const struct userdata {
     {"Vector2f", new_Vector2f},
     {"Vector3f", new_Vector3f},
     {"Location", new_Location},
+    {"AP_HAL::UARTDriver", new_AP_HAL__UARTDriver},
 };
 
 void load_generated_sandbox(lua_State *L) {

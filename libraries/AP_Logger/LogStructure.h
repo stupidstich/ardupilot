@@ -1236,6 +1236,8 @@ struct PACKED log_Arm_Disarm {
     uint64_t time_us;
     uint8_t  arm_state;
     uint16_t arm_checks;
+    uint8_t forced;
+    uint8_t method;
 };
 
 // FMT messages define all message formats other than FMT
@@ -1543,7 +1545,7 @@ struct PACKED log_Arm_Disarm {
     { LOG_EVENT_MSG, sizeof(log_Event), \
       "EV",   "QB",           "TimeUS,Id", "s-", "F-" }, \
     { LOG_ARM_DISARM_MSG, sizeof(log_Arm_Disarm), \
-      "ARM", "QBH", "TimeUS,ArmState,ArmChecks", "s--", "F--" }, \
+      "ARM", "QBHBB", "TimeUS,ArmState,ArmChecks,Forced,Method", "s----", "F----" }, \
     { LOG_ERROR_MSG, sizeof(log_Error), \
       "ERR",   "QBB",         "TimeUS,Subsys,ECode", "s--", "F--" }
 
@@ -1581,9 +1583,6 @@ enum LogMessages : uint8_t {
     LOG_XKFD_MSG,
     LOG_XKV1_MSG,
     LOG_XKV2_MSG,
-
-    LOG_FORMAT_MSG = 128, // this must remain #128
-
     LOG_PARAMETER_MSG,
     LOG_GPS_MSG,
     LOG_GPS2_MSG,
@@ -1629,7 +1628,12 @@ enum LogMessages : uint8_t {
     LOG_COMPASS3_MSG,
     LOG_MODE_MSG,
     LOG_GPS_RAW_MSG,
+
+    // LOG_GPS_RAWH_MSG is used as a check for duplicates. Do not add between this and LOG_FORMAT_MSG
     LOG_GPS_RAWH_MSG,
+
+    LOG_FORMAT_MSG = 128, // this must remain #128
+
     LOG_GPS_RAWS_MSG,
 	LOG_GPS_SBF_EVENT_MSG,
     LOG_ACC1_MSG,
@@ -1700,6 +1704,7 @@ enum LogMessages : uint8_t {
 };
 
 static_assert(_LOG_LAST_MSG_ <= 255, "Too many message formats");
+static_assert(LOG_GPS_RAWH_MSG < 128, "Duplicate message format IDs");
 
 enum LogOriginType {
     ekf_origin = 0,

@@ -31,7 +31,7 @@
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Common/Location.h>
 #include <AP_GPS/AP_GPS.h>
-#include <AP_Logger/AP_Logger.h>
+#include <AP_Baro/AP_Baro.h>
 #include <stdio.h>
 #include <math.h>
 
@@ -40,7 +40,6 @@ extern const AP_HAL::HAL& hal;
 AP_Frsky_Telem *AP_Frsky_Telem::singleton;
 
 AP_Frsky_Telem::AP_Frsky_Telem(bool _external_data) :
-    _statustext_queue(FRSKY_TELEM_PAYLOAD_STATUS_CAPACITY),
     use_external_data(_external_data)
 {
     singleton = this;
@@ -56,6 +55,7 @@ AP_Frsky_Telem::~AP_Frsky_Telem(void)
  */
 void AP_Frsky_Telem::setup_passthrough(void)
 {
+#if !APM_BUILD_TYPE(APM_BUILD_UNKNOWN)
     // make frsky_telemetry available to GCS_MAVLINK (used to queue statustext messages from GCS_MAVLINK)
     // add firmware and frame info to message queue
     const char* _frame_string = gcs().frame_string();
@@ -66,12 +66,13 @@ void AP_Frsky_Telem::setup_passthrough(void)
         snprintf(firmware_buf, sizeof(firmware_buf), "%s %s", AP::fwversion().fw_string, _frame_string);
         queue_message(MAV_SEVERITY_INFO, firmware_buf);
     }
+#endif
 
     // initialize packet weights for the WFQ scheduler
-    // weight[i] = 1/_passthrough.packet_period[i]
-    // rate[i] = LinkRate * ( weight[i] / (sum(weight[1-n])) )
-    _passthrough.packet_weight[0] = 35;   // 0x5000 status text (dynamic)
-    _passthrough.packet_weight[1] = 50;   // 0x5006 Attitude and range (dynamic)
+    // priority[i] = 1/_passthrough.packet_weight[i]
+    // rate[i] = LinkRate * ( priority[i] / (sum(priority[1-n])) )
+    _passthrough.packet_weight[0] = 35;    // 0x5000 status text (dynamic)
+    _passthrough.packet_weight[1] = 50;    // 0x5006 Attitude and range (dynamic)
     _passthrough.packet_weight[2] = 550;   // 0x800 GPS lat (600 with 1 sensor)
     _passthrough.packet_weight[3] = 550;   // 0x800 GPS lon (600 with 1 sensor)
     _passthrough.packet_weight[4] = 400;   // 0x5005 Vel and Yaw
@@ -135,8 +136,10 @@ void AP_Frsky_Telem::update_avg_packet_rate()
  * WFQ scheduler
  * for FrSky SPort Passthrough (OpenTX) protocol (X-receivers)
  */
-void AP_Frsky_Telem::passthrough_wfq_adaptive_scheduler(uint8_t prev_byte)
+void AP_Frsky_Telem::passthrough_wfq_adaptive_scheduler()
 {
+    update_avg_packet_rate();
+
     uint32_t now = AP_HAL::millis();
     uint8_t max_delay_idx = TIME_SLOT_MAX;
     
@@ -150,7 +153,12 @@ void AP_Frsky_Telem::passthrough_wfq_adaptive_scheduler(uint8_t prev_byte)
     check_ekf_status();
 
     // dynamic priorities
-    if (!_statustext_queue.empty()) {
+    bool queue_empty;
+    {
+        WITH_SEMAPHORE(_statustext.sem);
+        queue_empty = !_statustext.available && _statustext.queue.empty();
+    }
+    if (!queue_empty) {
         _passthrough.packet_weight[0] = 45;     // messages
         _passthrough.packet_weight[1] = 80;     // attitude
     } else {
@@ -168,7 +176,7 @@ void AP_Frsky_Telem::passthrough_wfq_adaptive_scheduler(uint8_t prev_byte)
         if (delay >= max_delay && ((now - _passthrough.packet_timer[i]) >= _sport_config.packet_min_period[i])) {
             switch (i) {
                 case 0:
-                    packet_ready = !_statustext_queue.empty();
+                    packet_ready = !queue_empty;
                     break;
                 case 5:
                     packet_ready = gcs().vehicle_initialised();
@@ -262,8 +270,7 @@ void AP_Frsky_Telem::send_SPort_Passthrough(void)
     }
     if (prev_byte == START_STOP_SPORT) {
         if (_passthrough.new_byte == SENSOR_ID_28) { // byte 0x7E is the header of each poll request
-            update_avg_packet_rate();
-            passthrough_wfq_adaptive_scheduler(prev_byte);
+            passthrough_wfq_adaptive_scheduler();
         }
     }
 }
@@ -274,8 +281,6 @@ void AP_Frsky_Telem::send_SPort_Passthrough(void)
  */
 void AP_Frsky_Telem::send_SPort(void)
 {
-    const AP_AHRS &_ahrs = AP::ahrs();
-
     int16_t numc;
     numc = _port->available();
 
@@ -289,6 +294,23 @@ void AP_Frsky_Telem::send_SPort(void)
         return;
     }
 
+    if (numc == 0) {
+        // no serial data to process do bg tasks
+        switch (_SPort.next_sensor_id) {
+            case SENSOR_ID_VARIO:
+                calc_nav_alt(); // nav altitude is not recalculated until all of it has been sent
+                break;
+            case SENSOR_ID_FAS:
+                break;
+            case SENSOR_ID_GPS:
+                calc_gps_position(); // gps data is not recalculated until all of it has been sent
+                break;
+            case SENSOR_ID_SP2UR:
+                break;
+        }
+        return;
+    }
+
     for (int16_t i = 0; i < numc; i++) {
         int16_t readbyte = _port->read();
         if (_SPort.sport_status == false) {
@@ -298,7 +320,25 @@ void AP_Frsky_Telem::send_SPort(void)
         } else {
             const AP_BattMonitor &_battery = AP::battery();
             switch(readbyte) {
-                case SENSOR_ID_FAS:
+                case SENSOR_ID_VARIO:   // Sensor ID  0
+                    switch (_SPort.vario_call) {
+                        case 0:
+                            send_uint32(SPORT_DATA_FRAME, DATA_ID_BARO_ALT_BP, _SPort_data.alt_nav_meters); // send altitude integer part
+                            break;
+                        case 1:
+                            send_uint32(SPORT_DATA_FRAME, DATA_ID_BARO_ALT_AP, _SPort_data.alt_nav_cm); // send altitude decimal part
+                            break;
+                        case 2:
+                            send_uint32(SPORT_DATA_FRAME, DATA_ID_VARIO, _SPort_data.vario_vspd); // send vspeed m/s
+                            // update vfas data in next idle serial port loop
+                            _SPort.next_sensor_id = SENSOR_ID_FAS;
+                            break;
+                    }
+                    if (++_SPort.vario_call > 2) {
+                        _SPort.vario_call = 0;
+                    } 
+                    break;    
+                case SENSOR_ID_FAS: // Sensor ID  2
                     switch (_SPort.fas_call) {
                         case 0:
                             send_uint32(SPORT_DATA_FRAME, DATA_ID_FUEL, (uint16_t)roundf(_battery.capacity_remaining_pct())); // send battery remaining
@@ -315,71 +355,58 @@ void AP_Frsky_Telem::send_SPort(void)
                                 send_uint32(SPORT_DATA_FRAME, DATA_ID_CURRENT, (uint16_t)roundf(current * 10.0f)); // send current consumption
                                 break;
                             }                        
+                            // update gps data in next idle serial port loop
+                            _SPort.next_sensor_id = SENSOR_ID_GPS;
                             break;
                     }
-                    if (_SPort.fas_call++ > 2) _SPort.fas_call = 0;
+                    if (++_SPort.fas_call > 2) {
+                        _SPort.fas_call = 0;
+                    }
                     break;
-                case SENSOR_ID_GPS:
+                case SENSOR_ID_GPS: // Sensor ID  3
                     switch (_SPort.gps_call) {
                         case 0:
-                            calc_gps_position(); // gps data is not recalculated until all of it has been sent
-                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_LAT_BP, _gps.latdddmm); // send gps lattitude degree and minute integer part
+                            send_uint32(SPORT_DATA_FRAME, GPS_LONG_LATI_FIRST_ID, calc_gps_latlng(&_passthrough.send_latitude)); // gps latitude or longitude
                             break;
                         case 1:
-                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_LAT_AP, _gps.latmmmm); // send gps lattitude minutes decimal part
+                            send_uint32(SPORT_DATA_FRAME, GPS_LONG_LATI_FIRST_ID, calc_gps_latlng(&_passthrough.send_latitude)); // gps latitude or longitude
                             break;
                         case 2:
-                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_LAT_NS, _gps.lat_ns); // send gps North / South information
+                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_SPEED_BP, _SPort_data.speed_in_meter); // send gps speed integer part
                             break;
                         case 3:
-                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_LONG_BP, _gps.londddmm); // send gps longitude degree and minute integer part
+                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_SPEED_AP, _SPort_data.speed_in_centimeter); // send gps speed decimal part
                             break;
                         case 4:
-                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_LONG_AP, _gps.lonmmmm); // send gps longitude minutes decimal part
+                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_ALT_BP, _SPort_data.alt_gps_meters); // send gps altitude integer part
                             break;
                         case 5:
-                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_LONG_EW, _gps.lon_ew); // send gps East / West information
+                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_ALT_AP, _SPort_data.alt_gps_cm); // send gps altitude decimals
                             break;
                         case 6:
-                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_SPEED_BP, _gps.speed_in_meter); // send gps speed integer part
-                            break;
-                        case 7:
-                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_SPEED_AP, _gps.speed_in_centimeter); // send gps speed decimal part
-                            break;
-                        case 8:
-                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_ALT_BP, _gps.alt_gps_meters); // send gps altitude integer part
-                            break;
-                        case 9:
-                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_ALT_AP, _gps.alt_gps_cm); // send gps altitude decimals
-                            break;
-                        case 10:
-                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_COURS_BP, (uint16_t)((_ahrs.yaw_sensor / 100) % 360)); // send heading in degree based on AHRS and not GPS
+                            send_uint32(SPORT_DATA_FRAME, DATA_ID_GPS_COURS_BP, _SPort_data.yaw); // send heading in degree based on AHRS and not GPS
+                            // update SPUR data in next idle serial port loop
+                            _SPort.next_sensor_id = SENSOR_ID_SP2UR;
                             break;
                     }
-                    if (_SPort.gps_call++ > 10) _SPort.gps_call = 0;
+                    if (++_SPort.gps_call > 6) {
+                        _SPort.gps_call = 0;
+                    }
                     break;
-                case SENSOR_ID_VARIO:
-                    switch (_SPort.vario_call) {
-                        case 0 :
-                            calc_nav_alt(); // nav altitude is not recalculated until all of it has been sent
-                            send_uint32(SPORT_DATA_FRAME, DATA_ID_BARO_ALT_BP, _gps.alt_nav_meters); // send altitude integer part
-                            break;
-                        case 1:
-                            send_uint32(SPORT_DATA_FRAME, DATA_ID_BARO_ALT_AP, _gps.alt_nav_cm); // send altitude decimal part
-                            break;
-                        }
-                    if (_SPort.vario_call++ > 1) _SPort.vario_call = 0;
-                    break;    
-                case SENSOR_ID_SP2UR:
+                case SENSOR_ID_SP2UR: // Sensor ID  6
                     switch (_SPort.various_call) {
                         case 0 :
                             send_uint32(SPORT_DATA_FRAME, DATA_ID_TEMP2, (uint16_t)(AP::gps().num_sats() * 10 + AP::gps().status())); // send GPS status and number of satellites as num_sats*10 + status (to fit into a uint8_t)
                             break;
                         case 1:
                             send_uint32(SPORT_DATA_FRAME, DATA_ID_TEMP1, gcs().custom_mode()); // send flight mode
+                            // update vario data in next idle serial port loop
+                            _SPort.next_sensor_id = SENSOR_ID_VARIO;
                             break;
                     }
-                    if (_SPort.various_call++ > 1) _SPort.various_call = 0;
+                    if (++_SPort.various_call > 1) {
+                        _SPort.various_call = 0;
+                    }
                     break;
             }
             _SPort.sport_status = false;
@@ -412,8 +439,8 @@ void AP_Frsky_Telem::send_D(void)
         }
         send_uint16(DATA_ID_CURRENT, (uint16_t)roundf(current * 10.0f)); // send current consumption        
         calc_nav_alt();
-        send_uint16(DATA_ID_BARO_ALT_BP, _gps.alt_nav_meters); // send nav altitude integer part
-        send_uint16(DATA_ID_BARO_ALT_AP, _gps.alt_nav_cm); // send nav altitude decimal part
+        send_uint16(DATA_ID_BARO_ALT_BP, _SPort_data.alt_nav_meters); // send nav altitude integer part
+        send_uint16(DATA_ID_BARO_ALT_AP, _SPort_data.alt_nav_cm); // send nav altitude decimal part
     }
     // send frame2 every second
     if (now - _D.last_1000ms_frame >= 1000) {
@@ -421,16 +448,16 @@ void AP_Frsky_Telem::send_D(void)
         send_uint16(DATA_ID_GPS_COURS_BP, (uint16_t)((_ahrs.yaw_sensor / 100) % 360)); // send heading in degree based on AHRS and not GPS
         calc_gps_position();
         if (AP::gps().status() >= 3) {
-            send_uint16(DATA_ID_GPS_LAT_BP, _gps.latdddmm); // send gps lattitude degree and minute integer part
-            send_uint16(DATA_ID_GPS_LAT_AP, _gps.latmmmm); // send gps lattitude minutes decimal part
-            send_uint16(DATA_ID_GPS_LAT_NS, _gps.lat_ns); // send gps North / South information
-            send_uint16(DATA_ID_GPS_LONG_BP, _gps.londddmm); // send gps longitude degree and minute integer part
-            send_uint16(DATA_ID_GPS_LONG_AP, _gps.lonmmmm); // send gps longitude minutes decimal part
-            send_uint16(DATA_ID_GPS_LONG_EW, _gps.lon_ew); // send gps East / West information
-            send_uint16(DATA_ID_GPS_SPEED_BP, _gps.speed_in_meter); // send gps speed integer part
-            send_uint16(DATA_ID_GPS_SPEED_AP, _gps.speed_in_centimeter); // send gps speed decimal part
-            send_uint16(DATA_ID_GPS_ALT_BP, _gps.alt_gps_meters); // send gps altitude integer part
-            send_uint16(DATA_ID_GPS_ALT_AP, _gps.alt_gps_cm); // send gps altitude decimal part
+            send_uint16(DATA_ID_GPS_LAT_BP, _SPort_data.latdddmm); // send gps lattitude degree and minute integer part
+            send_uint16(DATA_ID_GPS_LAT_AP, _SPort_data.latmmmm); // send gps lattitude minutes decimal part
+            send_uint16(DATA_ID_GPS_LAT_NS, _SPort_data.lat_ns); // send gps North / South information
+            send_uint16(DATA_ID_GPS_LONG_BP, _SPort_data.londddmm); // send gps longitude degree and minute integer part
+            send_uint16(DATA_ID_GPS_LONG_AP, _SPort_data.lonmmmm); // send gps longitude minutes decimal part
+            send_uint16(DATA_ID_GPS_LONG_EW, _SPort_data.lon_ew); // send gps East / West information
+            send_uint16(DATA_ID_GPS_SPEED_BP, _SPort_data.speed_in_meter); // send gps speed integer part
+            send_uint16(DATA_ID_GPS_SPEED_AP, _SPort_data.speed_in_centimeter); // send gps speed decimal part
+            send_uint16(DATA_ID_GPS_ALT_BP, _SPort_data.alt_gps_meters); // send gps altitude integer part
+            send_uint16(DATA_ID_GPS_ALT_AP, _SPort_data.alt_gps_cm); // send gps altitude decimal part
         }
     }
 }
@@ -554,16 +581,20 @@ void  AP_Frsky_Telem::send_uint16(uint16_t id, uint16_t data)
  */
 bool AP_Frsky_Telem::get_next_msg_chunk(void)
 {
-    if (_statustext_queue.empty()) {
-        return false;
+    if (!_statustext.available) {
+        WITH_SEMAPHORE(_statustext.sem);
+        if (!_statustext.queue.pop(_statustext.next)) {
+            return false;
+        }
+        _statustext.available = true;
     }
 
     if (_msg_chunk.repeats == 0) { // if it's the first time get_next_msg_chunk is called for a given chunk
         uint8_t character = 0;
         _msg_chunk.chunk = 0; // clear the 4 bytes of the chunk buffer
 
-        for (int i = 3; i > -1 && _msg_chunk.char_index < sizeof(_statustext_queue[0]->text); i--) {
-            character = _statustext_queue[0]->text[_msg_chunk.char_index++];
+        for (int i = 3; i > -1 && _msg_chunk.char_index < sizeof(_statustext.next.text); i--) {
+            character = _statustext.next.text[_msg_chunk.char_index++];
 
             if (!character) {
                 break;
@@ -572,12 +603,12 @@ bool AP_Frsky_Telem::get_next_msg_chunk(void)
             _msg_chunk.chunk |= character << i * 8;
         }
 
-        if (!character || (_msg_chunk.char_index == sizeof(_statustext_queue[0]->text))) { // we've reached the end of the message (string terminated by '\0' or last character of the string has been processed)
+        if (!character || (_msg_chunk.char_index == sizeof(_statustext.next.text))) { // we've reached the end of the message (string terminated by '\0' or last character of the string has been processed)
             _msg_chunk.char_index = 0; // reset index to get ready to process the next message
             // add severity which is sent as the MSB of the last three bytes of the last chunk (bits 24, 16, and 8) since a character is on 7 bits
-            _msg_chunk.chunk |= (_statustext_queue[0]->severity & 0x4)<<21;
-            _msg_chunk.chunk |= (_statustext_queue[0]->severity & 0x2)<<14;
-            _msg_chunk.chunk |= (_statustext_queue[0]->severity & 0x1)<<7;
+            _msg_chunk.chunk |= (_statustext.next.severity & 0x4)<<21;
+            _msg_chunk.chunk |= (_statustext.next.severity & 0x2)<<14;
+            _msg_chunk.chunk |= (_statustext.next.severity & 0x1)<<7;
         }
     }
 
@@ -597,8 +628,9 @@ bool AP_Frsky_Telem::get_next_msg_chunk(void)
     
     if (_msg_chunk.repeats++ > extra_chunks ) {
         _msg_chunk.repeats = 0;
-        if (_msg_chunk.char_index == 0) { // if we're ready for the next message
-            _statustext_queue.remove(0);
+        if (_msg_chunk.char_index == 0) {
+            // we're ready for the next message
+            _statustext.available = false;
         }
     }
     return true;
@@ -618,7 +650,8 @@ void AP_Frsky_Telem::queue_message(MAV_SEVERITY severity, const char *text)
     // The force push will ensure comm links do not block other comm links forever if they fail.
     // If we push to a full buffer then we overwrite the oldest entry, effectively removing the
     // block but not until the buffer fills up.
-    _statustext_queue.push_force(statustext);
+    WITH_SEMAPHORE(_statustext.sem);
+    _statustext.queue.push_force(statustext);
 }
 
 /*
@@ -1004,15 +1037,39 @@ uint16_t AP_Frsky_Telem::prep_number(int32_t number, uint8_t digits, uint8_t pow
 }
 
 /*
+ * get vertical speed from ahrs, if not available fall back to baro climbrate, units is m/s
+ * for FrSky D and SPort protocols
+ */
+float AP_Frsky_Telem::get_vspeed_ms(void)
+{
+
+    {// release semaphore as soon as possible
+        AP_AHRS &_ahrs = AP::ahrs();
+        Vector3f v;
+        WITH_SEMAPHORE(_ahrs.get_semaphore());
+        if (_ahrs.get_velocity_NED(v)) {
+            return -v.z;
+        }
+    }
+
+    auto &_baro = AP::baro();
+    WITH_SEMAPHORE(_baro.get_semaphore());
+    return _baro.get_climb_rate();
+}
+
+/*
  * prepare altitude between vehicle and home location data
  * for FrSky D and SPort protocols
  */
 void AP_Frsky_Telem::calc_nav_alt(void)
 {
-    const AP_AHRS &_ahrs = AP::ahrs();
-
+    _SPort_data.vario_vspd = (int32_t)(get_vspeed_ms()*100); //convert to cm/s
+    
     Location loc;
     float current_height = 0; // in centimeters above home
+    
+    AP_AHRS &_ahrs = AP::ahrs();
+    WITH_SEMAPHORE(_ahrs.get_semaphore());
     if (_ahrs.get_position(loc)) {
         current_height = loc.alt*0.01f;
         if (!loc.relative_alt) {
@@ -1020,9 +1077,9 @@ void AP_Frsky_Telem::calc_nav_alt(void)
             current_height -= _ahrs.get_home().alt*0.01f;
         }
     }
-    
-    _gps.alt_nav_meters = (int16_t)current_height;
-    _gps.alt_nav_cm = (current_height - _gps.alt_nav_meters) * 100;
+
+    _SPort_data.alt_nav_meters = (int16_t)current_height;
+    _SPort_data.alt_nav_cm = (current_height - _SPort_data.alt_nav_meters) * 100;
 } 
 
 /*
@@ -1049,33 +1106,37 @@ void AP_Frsky_Telem::calc_gps_position(void)
     if (AP::gps().status() >= 3) {
         const Location &loc = AP::gps().location(); //get gps instance 0
         lat = format_gps(fabsf(loc.lat/10000000.0f));
-        _gps.latdddmm = lat;
-        _gps.latmmmm = (lat - _gps.latdddmm) * 10000;
-        _gps.lat_ns = (loc.lat < 0) ? 'S' : 'N';
+        _SPort_data.latdddmm = lat;
+        _SPort_data.latmmmm = (lat - _SPort_data.latdddmm) * 10000;
+        _SPort_data.lat_ns = (loc.lat < 0) ? 'S' : 'N';
 
         lon = format_gps(fabsf(loc.lng/10000000.0f));
-        _gps.londddmm = lon;
-        _gps.lonmmmm = (lon - _gps.londddmm) * 10000;
-        _gps.lon_ew = (loc.lng < 0) ? 'W' : 'E';
+        _SPort_data.londddmm = lon;
+        _SPort_data.lonmmmm = (lon - _SPort_data.londddmm) * 10000;
+        _SPort_data.lon_ew = (loc.lng < 0) ? 'W' : 'E';
 
         alt = loc.alt * 0.01f;
-        _gps.alt_gps_meters = (int16_t)alt;
-        _gps.alt_gps_cm = (alt - _gps.alt_gps_meters) * 100;
+        _SPort_data.alt_gps_meters = (int16_t)alt;
+        _SPort_data.alt_gps_cm = (alt - _SPort_data.alt_gps_meters) * 100;
 
         speed = AP::gps().ground_speed();
-        _gps.speed_in_meter = speed;
-        _gps.speed_in_centimeter = (speed - _gps.speed_in_meter) * 100;
+        _SPort_data.speed_in_meter = speed;
+        _SPort_data.speed_in_centimeter = (speed - _SPort_data.speed_in_meter) * 100;
     } else {
-        _gps.latdddmm = 0;
-        _gps.latmmmm = 0;
-        _gps.lat_ns = 0;
-        _gps.londddmm = 0;
-        _gps.lonmmmm = 0;
-        _gps.alt_gps_meters = 0;
-        _gps.alt_gps_cm = 0;
-        _gps.speed_in_meter = 0;
-        _gps.speed_in_centimeter = 0;
+        _SPort_data.latdddmm = 0;
+        _SPort_data.latmmmm = 0;
+        _SPort_data.lat_ns = 0;
+        _SPort_data.londddmm = 0;
+        _SPort_data.lonmmmm = 0;
+        _SPort_data.alt_gps_meters = 0;
+        _SPort_data.alt_gps_cm = 0;
+        _SPort_data.speed_in_meter = 0;
+        _SPort_data.speed_in_centimeter = 0;
     }
+
+    AP_AHRS &_ahrs = AP::ahrs();
+    WITH_SEMAPHORE(_ahrs.get_semaphore());
+    _SPort_data.yaw = (uint16_t)((_ahrs.yaw_sensor / 100) % 360); // heading in degree based on AHRS and not GPS    
 }
 
 uint32_t AP_Frsky_Telem::sensor_status_flags() const
@@ -1093,7 +1154,7 @@ uint32_t AP_Frsky_Telem::sensor_status_flags() const
  */
 bool AP_Frsky_Telem::_get_telem_data(uint8_t &frame, uint16_t &appid, uint32_t &data)
 {
-    passthrough_wfq_adaptive_scheduler(0);
+    passthrough_wfq_adaptive_scheduler();
     if (!external_data.pending) {
         return false;
     }
@@ -1113,6 +1174,10 @@ bool AP_Frsky_Telem::get_telem_data(uint8_t &frame, uint16_t &appid, uint32_t &d
         // if telem data is requested when we are disarmed and don't
         // yet have a AP_Frsky_Telem object then try to allocate one
         new AP_Frsky_Telem(true);
+        // initialize the passthrough scheduler
+        if (singleton) {
+            singleton->setup_passthrough();
+        }
     }
     if (!singleton) {
         return false;

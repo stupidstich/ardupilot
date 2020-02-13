@@ -42,6 +42,7 @@ for FrSky D protocol (D-receivers)
 #define DATA_ID_GPS_LONG_EW         0x22
 #define DATA_ID_GPS_LAT_NS          0x23
 #define DATA_ID_CURRENT             0x28
+#define DATA_ID_VARIO               0x30
 #define DATA_ID_VFAS                0x39
 
 #define START_STOP_D                0x5E
@@ -147,11 +148,17 @@ private:
     uint32_t check_sensor_status_timer;
     uint32_t check_ekf_status_timer;
     uint8_t _paramID;
-    
-    ObjectArray<mavlink_statustext_t> _statustext_queue;
+
+    struct {
+        HAL_Semaphore sem;
+        ObjectBuffer<mavlink_statustext_t> queue{FRSKY_TELEM_PAYLOAD_STATUS_CAPACITY};
+        mavlink_statustext_t next;
+        bool available;
+    } _statustext;
     
     struct
     {
+        int32_t vario_vspd;
         char lat_ns, lon_ew;
         uint16_t latdddmm;
         uint16_t latmmmm;
@@ -163,7 +170,8 @@ private:
         uint16_t alt_nav_cm;
         int16_t speed_in_meter;
         uint16_t speed_in_centimeter;
-    } _gps;
+        uint16_t yaw;
+    } _SPort_data;
 
     struct PACKED
     {
@@ -181,7 +189,7 @@ private:
     struct
     {
         const uint32_t packet_min_period[TIME_SLOT_MAX] = {
-            0,      //0x5000 text,      no rate limiter
+            28,     //0x5000 text,      25Hz
             38,     //0x5006 attitude   20Hz
             280,    //0x800  GPS        3Hz
             280,    //0x800  GPS        3Hz
@@ -202,6 +210,7 @@ private:
         uint8_t gps_call;
         uint8_t vario_call;
         uint8_t various_call;
+        uint8_t next_sensor_id;
     } _SPort;
     
     struct
@@ -217,9 +226,10 @@ private:
         uint8_t char_index; // index of which character to get in the message
     } _msg_chunk;
     
+    float get_vspeed_ms(void);
     // passthrough WFQ scheduler
     void update_avg_packet_rate();
-    void passthrough_wfq_adaptive_scheduler(uint8_t prev_byte);
+    void passthrough_wfq_adaptive_scheduler();
     // main transmission function when protocol is FrSky SPort Passthrough (OpenTX)
     void send_SPort_Passthrough(void);
     // main transmission function when protocol is FrSky SPort

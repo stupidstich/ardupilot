@@ -335,13 +335,13 @@ bool RC_Channel::in_trim_dz() const
     return is_bounded_int32(radio_in, radio_trim - dead_zone, radio_trim + dead_zone);
 }
 
-void RC_Channel::set_override(const uint16_t v, const uint32_t timestamp_us)
+void RC_Channel::set_override(const uint16_t v, const uint32_t timestamp_ms)
 {
     if (!rc().gcs_overrides_enabled()) {
         return;
     }
 
-    last_override_time = timestamp_us != 0 ? timestamp_us : AP_HAL::millis();
+    last_override_time = timestamp_ms != 0 ? timestamp_ms : AP_HAL::millis();
     override_value = v;
     rc().new_override_received();
 }
@@ -359,7 +359,7 @@ bool RC_Channel::has_override() const
     }
 
     const float override_timeout_ms = rc().override_timeout_ms();
-    return is_positive(override_timeout_ms) && ((AP_HAL::millis() - last_override_time) < (uint32_t)override_timeout_ms);
+    return (override_timeout_ms < 0) || (is_positive(override_timeout_ms) && ((AP_HAL::millis() - last_override_time) < (uint32_t)override_timeout_ms));
 }
 
 /*
@@ -678,6 +678,7 @@ void RC_Channel::do_aux_function_relay(const uint8_t relay, bool val)
 
 void RC_Channel::do_aux_function_sprayer(const aux_switch_pos_t ch_flag)
 {
+#if HAL_SPRAYER_ENABLED
     AC_Sprayer *sprayer = AP::sprayer();
     if (sprayer == nullptr) {
         return;
@@ -686,6 +687,7 @@ void RC_Channel::do_aux_function_sprayer(const aux_switch_pos_t ch_flag)
     sprayer->run(ch_flag == HIGH);
     // if we are disarmed the pilot must want to test the pump
     sprayer->test_pump((ch_flag == HIGH) && !hal.util->get_soft_armed());
+#endif // HAL_SPRAYER_ENABLED
 }
 
 void RC_Channel::do_aux_function_gripper(const aux_switch_pos_t ch_flag)
